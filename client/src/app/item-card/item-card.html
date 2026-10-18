@@ -1,0 +1,88 @@
+@let a = analysis();
+<mat-card appearance="outlined" [class]="'rec-' + (a?.recommendation ?? 'NONE')">
+  <mat-card-header>
+    <mat-card-title>{{ item().name }}</mat-card-title>
+    <mat-card-subtitle>{{ item().sku }} · frissítve {{ timeAgo(item().lastFetchedAt) }}</mat-card-subtitle>
+    @if (a) {
+      <span class="badge" [class]="'badge badge-' + a.recommendation">
+        <mat-icon>{{ recommendationIcons[a.recommendation] }}</mat-icon>
+        {{ recommendationLabels[a.recommendation] }}
+      </span>
+    }
+  </mat-card-header>
+
+  <mat-card-content>
+    @if (a) {
+      <div class="stats">
+        <div class="stat" matTooltip="Ennél többet ne fizess: ezen az áron még teljesül a minimális haszon.">
+          <span class="label">Max. vételi ár</span>
+          <span class="value">{{ formatMoney(a.prices.maxBuyPrice, a.prices.maxBuyPriceKeys) }}</span>
+        </div>
+        <div class="stat" matTooltip="Ezen az áron érdemes meghirdetni, hogy valóban elkeljen.">
+          <span class="label">Javasolt eladási ár</span>
+          <span class="value">{{ formatMoney(a.prices.targetSell, a.prices.targetSellKeys) }}</span>
+        </div>
+        <div class="stat" matTooltip="Óvatos (pesszimista) becslés; zárójelben a tipikus árakkal várható haszon.">
+          <span class="label">Óvatos haszon</span>
+          <span class="value" [class.negative]="a.profit.conservativeMarginPercent < 0">
+            {{ formatPercent(a.profit.conservativeMarginPercent) }}
+            <small>(várható {{ formatPercent(a.profit.expectedMarginPercent) }})</small>
+          </span>
+        </div>
+        <div class="stat">
+          <span class="label">Jelenlegi vétel / eladás</span>
+          <span class="value">{{ formatKeys(a.prices.currentBuyKeys) }} / {{ formatKeys(a.prices.currentSellKeys) }}</span>
+        </div>
+        <div class="stat">
+          <span class="label">Kockázat</span>
+          <span class="value" [class]="'value risk-' + a.riskLevel">{{ riskLabels[a.riskLevel] }}</span>
+        </div>
+        <div class="stat" matTooltip="Az elmúlt 90 napon visszatesztelve ennyiszer lett volna nyereséges a vétel.">
+          <span class="label">Visszateszt</span>
+          <span class="value">{{ formatPercent(a.risk.backtestWinRatePercent) }} nyerő</span>
+        </div>
+      </div>
+
+      <p class="summary">{{ a.summary }}</p>
+
+      <mat-expansion-panel class="details">
+        <mat-expansion-panel-header>
+          <mat-panel-title>Ellenőrzések</mat-panel-title>
+          <mat-panel-description>
+            @if (failedChecks()) {
+              {{ failedChecks() }} nem teljesült
+            } @else {
+              mind teljesült
+            }
+          </mat-panel-description>
+        </mat-expansion-panel-header>
+        <ul class="checks">
+          @for (check of a.checks; track check.id) {
+            <li [class.failed]="!check.passed">
+              <mat-icon>{{ check.passed ? 'check_circle' : 'cancel' }}</mat-icon>
+              <span class="category">{{ categoryLabels[check.category] }}</span>
+              <span>{{ check.message }}</span>
+            </li>
+          }
+        </ul>
+      </mat-expansion-panel>
+    } @else if (item().error) {
+      <p class="message error"><mat-icon>error</mat-icon> {{ item().error }}</p>
+    } @else {
+      <p class="message">
+        <mat-icon>{{ collectorRunning() ? 'downloading' : 'schedule' }}</mat-icon>
+        {{ collectorRunning() ? 'Az adatok letöltése folyamatban…' : 'Még nincs elemzés – a következő gyűjtéskor elkészül.' }}
+      </p>
+    }
+  </mat-card-content>
+
+  <mat-card-actions>
+    <mat-slide-toggle [checked]="item().notify" (change)="notifyChange.emit($event.checked)">
+      Discord értesítés
+    </mat-slide-toggle>
+    <span class="spacer"></span>
+    <button mat-icon-button (click)="remove.emit()" matTooltip="Követés megszüntetése" aria-label="Követés megszüntetése">
+      <mat-icon>delete</mat-icon>
+    </button>
+  </mat-card-actions>
+</mat-card>

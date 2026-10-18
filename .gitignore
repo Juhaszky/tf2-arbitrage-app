@@ -1,0 +1,62 @@
+# --- Függőségek ---
+node_modules/
+.pnpm-store/
+
+# --- Build kimenet ---
+dist/
+out-tsc/
+build/
+*.tsbuildinfo
+
+# --- Angular ---
+.angular/
+
+# --- Környezeti változók / titkok ---
+# (Discord webhook URL stb. – a .env.example maradjon verziókezelve)
+.env
+.env.*
+!.env.example
+
+# --- Szerver futásidejű adatai (gyűjtő, elemzés, követés, history) ---
+server/data/
+
+# --- Logok ---
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Tesztek / lefedettség ---
+coverage/
+.nyc_output/
+
+# --- Cache / ideiglenes ---
+.cache/
+.tmp/
+tmp/
+*.tmp
+.eslintcache
+.sass-cache/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# --- IDE-k ---
+.idea/
+*.sublime-workspace
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/
+
+# --- Rendszerfájlok ---
+.DS_Store
+Thumbs.db
+Desktop.ini

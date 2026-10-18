@@ -1,0 +1,14 @@
+/* Az ajánlások színei világos és sötét témában */
+:root {
+  --app-buy: light-dark(#1e7d32, #7bd88f);
+  --app-buy-bg: light-dark(#e3f4e6, #1d3a24);
+  --app-watch: light-dark(#a15c00, #f5c26b);
+  --app-watch-bg: light-dark(#fdf0dc, #3d2e12);
+  --app-avoid: light-dark(#b3261e, #ffb4ab);
+  --app-avoid-bg: light-dark(#fce4e2, #44201d);
+}
+
+code {
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 0.9em;
+}

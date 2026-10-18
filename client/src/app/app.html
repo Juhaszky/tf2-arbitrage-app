@@ -1,0 +1,93 @@
+<mat-toolbar class="toolbar">
+  <mat-icon>trending_up</mat-icon>
+  <span class="title">TF2 Arbitrage</span>
+  <span class="spacer"></span>
+
+  @if (store.keyPriceMetal(); as keyPrice) {
+    <span class="key-price" matTooltip="Egy kulcs eladási ára (pricedb.io)">
+      <mat-icon>key</mat-icon>{{ keyPrice }} ref
+    </span>
+  }
+  <span [matTooltip]="store.discordConfigured() ? 'Teszt értesítés küldése Discordra' : 'Nincs beállítva a DISCORD_WEBHOOK_URL'">
+    <button
+      mat-icon-button
+      (click)="store.testNotification()"
+      [disabled]="!store.discordConfigured()"
+      aria-label="Teszt értesítés"
+    >
+      <mat-icon>notifications_active</mat-icon>
+    </button>
+  </span>
+  <button
+    mat-icon-button
+    (click)="store.runCollector()"
+    [disabled]="store.collectorRunning()"
+    matTooltip="Adatgyűjtés most"
+    aria-label="Adatgyűjtés most"
+  >
+    <mat-icon>sync</mat-icon>
+  </button>
+</mat-toolbar>
+@if (store.collectorRunning()) {
+  <mat-progress-bar mode="indeterminate" />
+}
+
+<main>
+  @if (store.error(); as error) {
+    <mat-card appearance="outlined" class="banner error">
+      <mat-icon>cloud_off</mat-icon>
+      <span>{{ error }} Fut a szerver (<code>npm run dev</code> a server mappában)?</span>
+    </mat-card>
+  }
+  @if (store.loaded() && !store.error() && !store.discordConfigured()) {
+    <mat-card appearance="outlined" class="banner">
+      <mat-icon>notifications_off</mat-icon>
+      <span>
+        A Discord értesítések nincsenek beállítva. Add meg a <code>DISCORD_WEBHOOK_URL</code>-t a
+        <code>server/.env</code> fájlban, majd indítsd újra a szervert.
+      </span>
+    </mat-card>
+  }
+
+  <app-add-item />
+
+  <div class="list-header">
+    <mat-button-toggle-group
+      [value]="store.filter()"
+      (change)="store.filter.set($event.value)"
+      hideSingleSelectionIndicator
+      aria-label="Szűrés ajánlás szerint"
+    >
+      @for (filter of filters; track filter.value) {
+        <mat-button-toggle [value]="filter.value">
+          {{ filter.label }} <span class="count">{{ store.counts()[filter.value] }}</span>
+        </mat-button-toggle>
+      }
+    </mat-button-toggle-group>
+    <span class="updated">Elemezve: {{ timeAgo(store.analyzedAt()) }}</span>
+  </div>
+
+  @if (!store.loaded()) {
+    <div class="center"><mat-progress-spinner mode="indeterminate" diameter="40" /></div>
+  } @else {
+    <section class="items">
+      @for (item of store.visibleItems(); track item.sku) {
+        <app-item-card
+          [item]="item"
+          [collectorRunning]="store.collectorRunning()"
+          (notifyChange)="store.setNotify(item, $event)"
+          (remove)="store.remove(item)"
+        />
+      } @empty {
+        <div class="empty">
+          <mat-icon>inventory_2</mat-icon>
+          @if (store.items().length === 0) {
+            <p>Még nem követsz egy tárgyat sem. Keress rá fent, és add hozzá.</p>
+          } @else {
+            <p>Nincs ilyen ajánlású tárgy.</p>
+          }
+        </div>
+      }
+    </section>
+  }
+</main>

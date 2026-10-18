@@ -1,0 +1,31 @@
+<mat-form-field appearance="outline" class="search" subscriptSizing="dynamic">
+  <mat-label>Tárgy követése</mat-label>
+  <mat-icon matPrefix>search</mat-icon>
+  <input
+    matInput
+    [value]="query()"
+    (input)="onInput($event)"
+    [matAutocomplete]="auto"
+    placeholder="pl. Strange Fast Learner vagy 722;11"
+    autocomplete="off"
+  />
+  @if (searching()) {
+    <mat-progress-spinner matSuffix mode="indeterminate" diameter="20" />
+  }
+  <mat-hint>Írd be a tárgy nevét vagy SKU-ját, és válaszd ki a listából.</mat-hint>
+
+  <mat-autocomplete #auto="matAutocomplete" [displayWith]="display" (optionSelected)="select($event)">
+    @for (item of results(); track item.sku) {
+      @let tracked = store.trackedSkus().has(item.sku);
+      <mat-option [value]="item" [disabled]="tracked">
+        <span class="option">
+          <span class="name">{{ item.name }}</span>
+          <span class="sku">{{ item.sku }}@if (tracked) { · már követed }</span>
+        </span>
+      </mat-option>
+    }
+    @if (noResults()) {
+      <mat-option disabled>Nincs találat</mat-option>
+    }
+  </mat-autocomplete>
+</mat-form-field>
