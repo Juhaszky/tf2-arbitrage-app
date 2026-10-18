@@ -34,6 +34,18 @@ export class PriceDbClient {
     return this.get<HistoryEntry[]>(`/item-history/${encodeURIComponent(sku)}`);
   }
 
+  /** Minden tárgy legutolsó ára egyetlen kérésben (kb. 8 MB). */
+  async getPricelist(): Promise<HistoryEntry[]> {
+    const { items } = await this.get<{ items: HistoryEntry[] }>('/autob/items');
+    if (!Array.isArray(items)) throw new PriceDbError('A pricedb.io árlistája nem tömb.');
+    return items;
+  }
+
+  /** Minden tárgy legutolsó ára az adott időpontban (unix másodperc). */
+  getSnapshot(timestamp: number) {
+    return this.get<HistoryEntry[]>(`/snapshot/${timestamp}`);
+  }
+
   private async throttle() {
     const wait = this.nextRequestAt - Date.now();
     if (wait > 0) await sleep(wait);

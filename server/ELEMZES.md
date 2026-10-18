@@ -249,6 +249,8 @@ A `maxBuyPrice` akkor is hasznos, ha az ajánlás nem `BUY`: megmutatja, milyen 
 | `VOLATILITY` | kockázat | ingadozás legfeljebb 15% | Erősen ingadozó árú tárgynál a haszon esetleges. |
 | `TREND` | kockázat | heti esés legfeljebb 5% | Csökkenő árú tárgyon ülve elfogyhat a haszon. |
 | `LIQUIDITY` | kockázat | legalább napi 0,1 árbejegyzés (kb. 10 naponta egy) | A ritkán mozgó árú tárgy jellemzően rosszabbul forog, és sokáig a nyakadon maradhat. |
+| `SALE_SPEED` | kockázat | a tényleges (mannco.store) eladások alapján egy darab legfeljebb 14 nap alatt elkel | Csak ha van párosított mannco tárgy. A sebesség a 90 napos eladásokból számít, ha abban legalább 5 volt, különben az éves adatból. Ha egy éve nem volt eladás, elbukik. |
+| `SPREAD_SANITY` | kockázat | a medián eladási ár legfeljebb 200%-kal a medián vételi ár fölött | Ennél nagyobb árrés szinte mindig irreális hirdetésből adódik (pl. 9999 kulcsos eladási ár), nem valódi lehetőség. |
 
 ### Hogyan születik az ajánlás
 
@@ -258,6 +260,28 @@ A szerver a szabályokat ebben a sorrendben vizsgálja, és az első teljesülő
 2. **`INSUFFICIENT_DATA`**, ha bármelyik *adat* kategóriájú ellenőrzés elbukik.
 3. **`BUY`**, ha minden ellenőrzés teljesül.
 4. **`WATCH`** minden más esetben.
+
+### Eladási sebesség (`sales`)
+
+A pricedb csak a hirdetési árak history-ját adja, a tényleges eladásokat nem. Ha a tárgy párosítható a mannco.store-ral, a szerver letölti a mannco eladásait (egy év, napi bontás, tárgyanként naponta egyszer), és ebből becsüli, mennyi idő alatt kel el egy darab (1 / napi eladás). Ez a backpack.tf-es eladásnak is a legjobb elérhető közelítése.
+
+- A `SALE_SPEED` ellenőrzés elbukik, ha a becsült eladási idő `maxDaysToSell`-nél hosszabb.
+- **A tartási idő a becsült eladási időhöz igazodik.** Ha egy tárgy 10 nap alatt kel el, az óvatos eladási ár és a visszateszt 10 napos áreséssel számol, nem a fix 3 nappal. A visszateszt-időszak ilyenkor hosszabb, így a lassan eladható tárgyaknál gyakrabban lesz `INSUFFICIENT_DATA` az eredmény.
+- A válasz `sales` mezője tartalmazza az eladásszámokat (30, 90, 365 nap), az utolsó eladás idejét, a darabonkénti medián árat és a becsült eladási időt; a `data.holdingDays` és a `data.backtestDays` a ténylegesen használt értékeket.
+
+### Vétel mannco.store-on (`alternative`, `bestRoute`)
+
+Ha a tárgy a mannco.store-on is kapható (és be van állítva a `MANNCO_API_KEY`), a szerver egy második útvonalat is értékel: **vétel azonnal a legolcsóbb mannco ajánlatból, eladás backpack.tf-en**. A mannco ár USD-ben van, ezt a mannco saját kulcsárával váltja kulcsra, mert a dollárt ott tudnád kulcsra váltani.
+
+Ugyanaz a logika dönt, ugyanazokkal a küszöbökkel:
+
+- **Az eladási oldal ellenőrzései** változatlanul érvényesek: `DATA_POINTS`, `HISTORY_SPAN`, `FRESHNESS`, `BACKTEST_SAMPLE`, `VOLATILITY`, `TREND`, `LIQUIDITY`, `SPREAD_SANITY`.
+- **A haszon** az óvatos backpack.tf eladási ár mínusz a mannco ár (`CONSERVATIVE_MARGIN`, `CONSERVATIVE_PROFIT`). A vételi ár itt ismert és azonnal teljesül, ezért nincs szükség óvatos vételi becslésre.
+- **A visszateszt** (`WIN_RATE`, `WIN_RATE_CONFIDENCE`) azt méri, hogy az elmúlt időszakban az idő hány százalékában lehetett volna a tartási időn belül a mannco ár fölött eladni.
+- **`STOCK`** (adat): legalább 1 darab elérhető a mannco-n.
+- **`PRICE_SANITY`** (kockázat): a mannco ár legalább a backpack.tf medián vételi ár 50%-a. Az ennél sokkal olcsóbb ajánlat szinte mindig eltérő változat (festék, spell, más effekt) vagy rossz párosítás.
+
+A válaszban az `alternative` mező tartalmazza a mannco útvonal ajánlását, árát, készletét, linkjét és ellenőrzéseit. A `bestRoute` mutatja a jobb útvonalat: a vételre ajánlott közül a nagyobb óvatos hasznút, különben a jobb ajánlásút. Az `isWorthBuying` akkor igaz, ha **bármelyik** útvonalon `BUY` az ajánlás. A frontend lista, a szűrők és a Discord értesítések a `bestRoute` szerint működnek.
 
 ---
 
@@ -282,6 +306,8 @@ Minden küszöb állítható a kérés `options` mezőjében. Csak nemnegatív s
 | `minWinRatePercent` | 90 | Minimális visszateszt-nyerési arány (a nyers arányra és az alsó konfidenciahatárra is). |
 | `minBacktestTrades` | 15 | Minimális független visszatesztelt ügyletszám. |
 | `minUpdatesPerDay` | 0.1 | Minimális napi árbejegyzés-szám. |
+| `maxDaysToSell` | 14 | A becsült eladási idő felső határa napban. A tartási idő is ehhez igazodik: legalább `holdingDays`, legfeljebb ennyi nap, a visszateszt-időszak pedig legalább a tartási idő 15-szöröse, hogy maradjon elég független ügylet. |
+| `maxSpreadPercent` | 200 | A medián eladási ár legfeljebb ennyi százalékkal lehet a medián vételi ár fölött. |
 
 Ha a fentinél is biztonságosabb ajánlásokat szeretnél (kevesebb, de még megbízhatóbb `BUY`), például ezekkel a beállításokkal:
 

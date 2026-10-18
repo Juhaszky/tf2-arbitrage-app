@@ -1,0 +1,178 @@
+<h2 mat-dialog-title>
+  <span class="title">{{ data.name }}</span>
+  <span class="subtitle">Statisztikák – milyen adatok alapján döntött az elemzés</span>
+</h2>
+
+<mat-dialog-content>
+  @if (error(); as e) {
+    <p class="message"><mat-icon>info</mat-icon> {{ e }}</p>
+  } @else if (!stats()) {
+    <div class="center"><mat-progress-spinner mode="indeterminate" diameter="40" /></div>
+  } @else {
+    @let s = summary()!;
+    @let a = analysis()!;
+
+    @if (alternative()) {
+      <div class="route-switch">
+        <span class="label">Vételi útvonal:</span>
+        <mat-button-toggle-group [value]="route()" (change)="route.set($event.value)" hideSingleSelectionIndicator aria-label="Vételi útvonal">
+          <mat-button-toggle value="bptf">
+            backpack.tf → backpack.tf
+            @if (a.bestRoute?.source !== 'mannco') { <span class="best">legjobb</span> }
+          </mat-button-toggle>
+          <mat-button-toggle value="mannco">
+            mannco.store → backpack.tf
+            @if (a.bestRoute?.source === 'mannco') { <span class="best">legjobb</span> }
+          </mat-button-toggle>
+        </mat-button-toggle-group>
+      </div>
+    }
+
+    <section class="tiles" aria-label="Összesítő">
+      <div class="tile">
+        <span class="tile-label">Ajánlás</span>
+        <span class="tile-value" [class]="'tile-value rec-' + s.recommendation">{{ recommendationLabels[s.recommendation] }}</span>
+      </div>
+      <div class="tile">
+        <span class="tile-label">Óvatos haszon</span>
+        <span class="tile-value">{{ formatKeys(s.profitKeys) }}</span>
+        <span class="tile-sub">{{ formatPercent(s.marginPercent) }} haszonkulcs</span>
+      </div>
+      <div class="tile">
+        <span class="tile-label">Visszateszt</span>
+        <span class="tile-value">{{ formatPercent(s.winRate) }}</span>
+        <span class="tile-sub">nyerő · {{ s.trades }} független ügylet</span>
+      </div>
+      <div class="tile">
+        <span class="tile-label">Becsült eladási idő</span>
+        <span class="tile-value">
+          @if (salesTotals(); as st) {
+            {{ st.expectedDaysToSell === null ? 'nincs eladás' : num(st.expectedDaysToSell, 1) + ' nap' }}
+          } @else {
+            –
+          }
+        </span>
+        <span class="tile-sub">tartás a visszatesztben: {{ a.series.holdingDays }} nap</span>
+      </div>
+      <div class="tile">
+        <span class="tile-label">Ingadozás · heti trend</span>
+        <span class="tile-value">{{ formatPercent(a.risk.volatilityPercent) }}</span>
+        <span class="tile-sub">trend {{ formatPercent(a.risk.sellTrendPercentPerWeek) }} / hét</span>
+      </div>
+    </section>
+    <p class="summary">{{ s.summary }}</p>
+
+    <section class="chart-card">
+      <h3>Ártörténet (kulcsban)</h3>
+      <p class="caption">
+        A backpack.tf vételi és eladási ára az elemzett időszakban, lépcsős vonalként (egy ár a következő bejegyzésig érvényes).
+        A szaggatott vonalak a döntési szintek. A halvány sáv az elemzési ablak előtti rész: azt csak a visszateszt használja,
+        a medián, az ingadozás és a trend az utolsó szakaszból számít.
+        @if (outliers()) { {{ outliers() }} kiugró bejegyzést az elemzés kiszűrt, ezek nem látszanak. }
+      </p>
+      <app-line-chart
+        [series]="priceSeries()"
+        [refLines]="refLines()"
+        [from]="a.series.backtestStart * 1000"
+        [windowStart]="a.series.windowStart * 1000"
+        [height]="300"
+        ariaLabel="A backpack.tf vételi és eladási ár, valamint a mannco eladások idővel, kulcsban"
+      />
+      <details>
+        <summary>Adatok táblázatban (legutóbbi 40 bejegyzés)</summary>
+        <table>
+          <thead><tr><th>Idő</th><th>bptf vétel</th><th>bptf eladás</th><th></th></tr></thead>
+          <tbody>
+            @for (r of priceRows(); track r.t) {
+              <tr [class.muted]="r.outlier">
+                <td>{{ dateLong(r.t) }}</td><td>{{ num(r.buy, 3) }}</td><td>{{ num(r.sell, 3) }}</td>
+                <td>{{ r.outlier ? 'kiszűrt kiugró' : '' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </details>
+    </section>
+
+    <section class="chart-card">
+      <h3>Tényleges eladások a mannco.store-on (hetente)</h3>
+      @if (!stats()!.mannco) {
+        <p class="caption">A tárgy nincs párosítva mannco.store tárgyhoz, ezért nincs tényleges eladási adat.</p>
+      } @else if (!stats()!.mannco!.salesLoaded) {
+        <p class="caption">Az eladási adatok a következő gyűjtéskor töltődnek le.</p>
+      } @else {
+        <p class="caption">
+          @if (salesTotals(); as st) {
+            30 nap: <strong>{{ st.sales30 }}</strong> · 90 nap: <strong>{{ st.sales90 }}</strong> · 1 év: <strong>{{ st.sales365 }}</strong> eladás.
+          }
+          Ebből számít a becsült eladási idő (a „Becsült eladási idő” szabály) és a saját buy order reális ára.
+          @if (stats()!.mannco!.offer; as o) { Most a legolcsóbb ajánlat {{ formatUsd(o.usd) }} ({{ o.stock }} db). }
+          @if (stats()!.mannco!.bid; as b) { A legmagasabb buy order {{ formatUsd(b.usd) }}. }
+        </p>
+        <app-bar-chart [bars]="salesBars()" [height]="200" ariaLabel="Heti eladott darabszám a mannco.store-on az elmúlt 52 hétben" />
+        <details>
+          <summary>Adatok táblázatban (legutóbbi 40 eladásos nap)</summary>
+          <table>
+            <thead><tr><th>Nap</th><th>Darab</th><th>Darabár</th><th>Kulcsban</th></tr></thead>
+            <tbody>
+              @for (r of salesRows(); track r.t) {
+                <tr><td>{{ dateLong(r.t) }}</td><td>{{ r.count }}</td><td>{{ formatUsd(r.usd) }}</td><td>{{ r.keys === null ? '–' : num(r.keys, 3) }}</td></tr>
+              }
+            </tbody>
+          </table>
+        </details>
+      }
+    </section>
+
+    <section class="chart-card">
+      <h3>Visszateszt: a múltbeli vételek hozama</h3>
+      <p class="caption">
+        Minden múltbeli időpontra: ha akkor
+        {{ isMannco() ? 'a mostani mannco áron' : 'a backpack.tf vételi áron' }} veszed, és a {{ a.series.holdingDays }} napos tartási
+        időn belül az eladási árak alsó negyedén adod el, mennyit nyersz vagy vesztesz. A kék nyereség, a piros veszteség;
+        a „Nyerési arány” szabály a kék rész aránya.
+      </p>
+      @if (returnBins().bars.length) {
+        <app-bar-chart
+          [bars]="returnBins().bars"
+          [height]="200"
+          [marker]="returnBins().zeroIndex === null ? null : { index: returnBins().zeroIndex!, label: '0%' }"
+          ariaLabel="A visszateszt hozamainak eloszlása százalékban"
+        />
+        <details>
+          <summary>Adatok táblázatban</summary>
+          <table>
+            <thead><tr><th>Hozam</th><th>Esetek</th></tr></thead>
+            <tbody>
+              @for (b of returnBins().bars; track $index) {
+                <tr><td>{{ b.tooltip[1] }}</td><td>{{ b.tooltip[0] }}</td></tr>
+              }
+            </tbody>
+          </table>
+        </details>
+      } @else {
+        <p class="caption">Nincs elég adat a visszateszthez.</p>
+      }
+    </section>
+
+    <section class="chart-card">
+      <h3>Szabályok: mért érték a küszöbhöz képest</h3>
+      <p class="caption">
+        A sáv a mért érték, a függőleges jelölő a küszöb. „Vétel” csak akkor lehet, ha minden szabály teljesül; ha egy
+        adat-szabály bukik el, „Kevés adat”; ha a haszon nem pozitív, „Kerüld”.
+      </p>
+      <app-check-bars [checks]="s.checks" />
+    </section>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions>
+  @if (data.bptfUrl) {
+    <a mat-button [href]="data.bptfUrl" target="_blank" rel="noopener">backpack.tf <mat-icon iconPositionEnd>open_in_new</mat-icon></a>
+  }
+  @if (data.manncoUrl) {
+    <a mat-button [href]="data.manncoUrl" target="_blank" rel="noopener">mannco.store <mat-icon iconPositionEnd>open_in_new</mat-icon></a>
+  }
+  <span class="spacer"></span>
+  <button mat-flat-button mat-dialog-close>Bezárás</button>
+</mat-dialog-actions>

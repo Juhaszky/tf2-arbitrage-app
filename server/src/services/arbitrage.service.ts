@@ -45,6 +45,17 @@ export interface AnalysisOptions {
   minBacktestTrades: number;
   /** Ennyi árváltozás kell naponta (a forgalom közelítése). */
   minUpdatesPerDay: number;
+  /**
+   * A medián eladási ár legfeljebb ennyi százalékkal lehet a medián vételi ár fölött. Ennél nagyobb árrés
+   * szinte mindig irreális hirdetésből adódik (pl. 9999 kulcsos eladási ár), nem valódi lehetőség.
+   */
+  maxSpreadPercent: number;
+  /**
+   * A tényleges eladások alapján becsült eladási idő legfeljebb ennyi nap lehet. A tartási idő is ehhez
+   * igazodik (legalább `holdingDays`, legfeljebb ennyi), hogy a visszateszt a valós eladási idő alatti
+   * ármozgással számoljon.
+   */
+  maxDaysToSell: number;
 }
 
 export const DEFAULT_OPTIONS: AnalysisOptions = {
@@ -62,6 +73,8 @@ export const DEFAULT_OPTIONS: AnalysisOptions = {
   minWinRatePercent: 90,
   minBacktestTrades: 15,
   minUpdatesPerDay: 0.1,
+  maxSpreadPercent: 200,
+  maxDaysToSell: 14,
 };
 
 export type Recommendation = 'BUY' | 'WATCH' | 'AVOID' | 'INSUFFICIENT_DATA';
@@ -75,6 +88,53 @@ export interface Check {
   threshold: number;
   message: string;
 }
+
+/** A tárgy egy másik piacon (pl. mannco.store) azonnal megvehető ajánlata. */
+export interface AlternativeBuy {
+  /** Gépi azonosító, pl. `mannco`. */
+  source: string;
+  /** Megjelenített név, pl. `mannco.store`. */
+  label: string;
+  /** A vételi ár kulcsban (a piac saját kulcsárával átváltva). */
+  buyKeys: number;
+  /** Az eredeti ár és pénznem a megjelenítéshez (pl. 12.34 USD). */
+  price: number;
+  currency: string;
+  /** Elérhető darabszám. */
+  stock: number;
+  url?: string;
+}
+
+/** A tényleges eladások statisztikája (jelenleg a mannco.store eladásaiból). */
+export interface SalesInfo {
+  source: string;
+  label: string;
+  sales30: number;
+  sales90: number;
+  sales365: number;
+  lastSaleAt: string | null;
+  /** Napi eladás: a 90 napos időszakból, ha abban elég eladás volt, különben az éves adatból. */
+  salesPerDay: number;
+  windowDays: number;
+  /** Becsült idő egy darab eladásáig (1 / napi eladás), napban; null, ha egy éve nem volt eladás. */
+  expectedDaysToSell: number | null;
+  /** A darabonkénti eladási árak mediánja az időszakban (az eredeti pénznemben). */
+  medianUnitPrice: number | null;
+  currency: string;
+}
+
+/** Ezek az ellenőrzések csak az eladási oldalról (backpack.tf) szólnak, így egy másik piacon való vételre is érvényesek. */
+const SELL_SIDE_CHECKS = [
+  'DATA_POINTS', 'HISTORY_SPAN', 'FRESHNESS', 'BACKTEST_SAMPLE', 'VOLATILITY', 'TREND', 'LIQUIDITY', 'SPREAD_SANITY',
+  'SALE_SPEED',
+];
+/** A grafikonhoz legfeljebb ennyi visszateszt-hozam kerül a válaszba (egyenletesen ritkítva). */
+const MAX_SERIES_RETURNS = 2000;
+/** A visszateszt egy tartási időt legfeljebb ennyi mintával néz végig; hosszabb tartásnál ritkítunk. */
+const MAX_HORIZON_SAMPLES = 72;
+/** A másik piac ára legalább a backpack.tf medián vételi ár ennyi százaléka kell legyen, különben gyanús. */
+const MIN_ALTERNATIVE_PRICE_RATIO = 50;
+const RECOMMENDATION_RANK: Record<Recommendation, number> = { BUY: 0, WATCH: 1, INSUFFICIENT_DATA: 2, AVOID: 3 };
 
 /** Hibás bemenet – a controller 400-as válaszként adja vissza. */
 export class AnalysisInputError extends Error {}
@@ -106,10 +166,22 @@ export class ArbitrageService {
     entries: HistoryEntry[],
     overrides: Partial<AnalysisOptions> = {},
     keyPriceHistory?: KeyPricePoint[],
+    alternative?: AlternativeBuy,
+    sales?: SalesInfo,
+    /** A grafikonokhoz az idősorokat és a visszateszt hozamait is visszaadja (nagyobb válasz). */
+    withSeries = false,
   ) {
     const opts: AnalysisOptions = { ...DEFAULT_OPTIONS, ...overrides };
     const fee = opts.sellFeePercent / 100;
-    const holding = opts.holdingDays * DAY;
+
+    // Tartási idő: ha ismert a tényleges eladási sebesség, a becsült eladási időhöz igazodik (legalább a beállított,
+    // legfeljebb maxDaysToSell nap), a visszateszt-időszak pedig úgy nő, hogy maradjon elég független ügylet
+    const daysToSell = sales ? (sales.expectedDaysToSell ?? Infinity) : undefined;
+    const holdingDays = daysToSell === undefined
+      ? opts.holdingDays
+      : Math.min(Math.max(opts.holdingDays, Math.ceil(daysToSell)), Math.max(opts.holdingDays, opts.maxDaysToSell));
+    const backtestDays = Math.max(opts.backtestDays, holdingDays * opts.minBacktestTrades);
+    const holding = holdingDays * DAY;
 
     // Kulcsár: a fix érték elsőbbséget élvez, különben a kulcsár-history-ból a bejegyzés idején érvényes ár
     const keyHistory = opts.keyPriceMetal === undefined && keyPriceHistory?.length
@@ -126,7 +198,7 @@ export class ArbitrageService {
     // az utolsó ár pedig egészen mostanáig.
     const latestT = points[points.length - 1].t;
     const end = Math.max(latestT, Date.now() / 1000);
-    const backtestStart = Math.max(points[0].t, end - opts.backtestDays * DAY);
+    const backtestStart = Math.max(points[0].t, end - backtestDays * DAY);
     const windowStart = Math.max(points[0].t, end - opts.windowDays * DAY);
 
     // 1. A visszateszt időszakának bejegyzései + az előtte utolsó (az időszak elején az az érvényes ár)
@@ -161,7 +233,7 @@ export class ArbitrageService {
 
     // Óvatos vétel: drágább vételi ár; óvatos eladás: olcsóbb eladási ár, és a csökkenő trend is levonásra kerül
     const conservativeBuy = Math.max(quantile(buys, 0.75), currentBuy);
-    const projectedSell = currentSell + Math.min(sellSlopePerDay, 0) * opts.holdingDays;
+    const projectedSell = currentSell + Math.min(sellSlopePerDay, 0) * holdingDays;
     const conservativeSellNet = Math.min(quantile(sells, 0.25), projectedSell) * (1 - fee);
     const conservativeProfit = conservativeSellNet - conservativeBuy;
     const conservativeMargin = conservativeBuy > 0 ? (conservativeProfit / conservativeBuy) * 100 : 0;
@@ -175,9 +247,12 @@ export class ArbitrageService {
     const backtestPeriodDays = (end - backtestStart) / DAY;
     const changesInPeriod = clean.filter((p) => p.t >= backtestStart).length;
     const updatesPerDay = backtestPeriodDays > 0 ? changesInPeriod / backtestPeriodDays : 0;
-    const estimatedSaleSpeed =
-      updatesPerDay >= 1 ? 'FAST' : updatesPerDay >= opts.minUpdatesPerDay ? 'NORMAL' : 'SLOW';
+    // Ha vannak tényleges eladások, azokból; különben az árváltozások gyakoriságából közelítünk
+    const estimatedSaleSpeed = daysToSell !== undefined
+      ? (daysToSell <= 1 ? 'FAST' : daysToSell <= opts.maxDaysToSell ? 'NORMAL' : 'SLOW')
+      : updatesPerDay >= 1 ? 'FAST' : updatesPerDay >= opts.minUpdatesPerDay ? 'NORMAL' : 'SLOW';
     const dataAgeHours = Math.max(0, (Date.now() / 1000 - latestT) / 3600);
+    const spreadPercent = medianBuy > 0 ? (medianSell / medianBuy - 1) * 100 : 0;
 
     // 9. Ellenőrzések
     const checks: Check[] = [
@@ -207,27 +282,96 @@ export class ArbitrageService {
         `Az eladási ár heti változása ${round(sellTrendPercentPerWeek, 1)}%, legfeljebb ${opts.maxDownTrendPercentPerWeek}%-os esés megengedett.`),
       check('LIQUIDITY', 'risk', updatesPerDay >= opts.minUpdatesPerDay, updatesPerDay, opts.minUpdatesPerDay,
         `Napi ${round(updatesPerDay)} árváltozás, legalább ${opts.minUpdatesPerDay} kell.`),
+      check('SPREAD_SANITY', 'risk', spreadPercent <= opts.maxSpreadPercent, spreadPercent, opts.maxSpreadPercent,
+        `A medián eladási ár ${round(spreadPercent, 0)}%-kal a medián vételi ár fölött van; ${opts.maxSpreadPercent}% fölött ` +
+        'az eladási ár valószínűleg irreális hirdetés.'),
+      ...(sales && daysToSell !== undefined ? [
+        check('SALE_SPEED', 'risk', daysToSell <= opts.maxDaysToSell, Math.min(daysToSell, 9999), opts.maxDaysToSell,
+          sales.expectedDaysToSell === null
+            ? `Az elmúlt évben egyetlen eladás sem volt a(z) ${sales.label} oldalon, így nem látszik, hogy el tudnád-e adni.`
+            : `A(z) ${sales.label} tényleges eladásai alapján egy darab kb. ${round(daysToSell, 1)} nap alatt kel el ` +
+              `(${sales.windowDays} nap alatt ${sales.windowDays === 90 ? sales.sales90 : sales.sales365} eladás), ` +
+              `legfeljebb ${opts.maxDaysToSell} nap lehet. A visszateszt ${holdingDays} napos tartással számolt.`),
+      ] : []),
     ];
 
-    const failed = checks.filter((c) => !c.passed);
-    const failedIn = (cat: CheckCategory) => failed.some((c) => c.category === cat);
-    const backtestReliable = backtest.independentTrades >= opts.minBacktestTrades;
+    const { recommendation, riskLevel, failed } = decide(checks, expectedProfit, conservativeProfit, backtest, opts);
 
-    let recommendation: Recommendation;
-    if (!(expectedProfit > 0) || !(conservativeProfit > 0) || (backtestReliable && backtest.winRatePercent < 50)) {
-      recommendation = 'AVOID';
-    } else if (failedIn('data')) {
-      recommendation = 'INSUFFICIENT_DATA';
-    } else if (failed.length === 0) {
-      recommendation = 'BUY';
-    } else {
-      recommendation = 'WATCH';
+    // Ugyanez a tárgy egy másik piacon (pl. mannco.store) fix áron azonnal megvehető: ugyanazzal az eladási
+    // oldallal (óvatos eladási ár, ingadozás, trend, forgalom) és a fix vételi árral futtatott visszateszttel döntünk
+    let alternativeRoute = null;
+    if (alternative) {
+      const buy = alternative.buyKeys;
+      const altBacktest = this.backtest(samples, holding, fee, buy);
+      const altExpected = medianSell * (1 - fee) - buy;
+      const altProfit = conservativeSellNet - buy;
+      const altMargin = buy > 0 ? (altProfit / buy) * 100 : 0;
+      const priceRatio = medianBuy > 0 ? (buy / medianBuy) * 100 : 100;
+      const label = alternative.label;
+
+      const altChecks: Check[] = [
+        ...checks.filter((c) => SELL_SIDE_CHECKS.includes(c.id)),
+        check('STOCK', 'data', alternative.stock >= 1, alternative.stock, 1,
+          `A(z) ${label} oldalon ${alternative.stock} darab elérhető.`),
+        check('CONSERVATIVE_MARGIN', 'profit', altMargin >= opts.minMarginPercent, altMargin, opts.minMarginPercent,
+          `Óvatos haszonkulcs ${label} vétellel: ${round(altMargin, 1)}%, legalább ${opts.minMarginPercent}% kell.`),
+        check('CONSERVATIVE_PROFIT', 'profit', altProfit >= opts.minProfitKeys, altProfit, opts.minProfitKeys,
+          `Óvatos haszon ${label} vétellel: ${round(altProfit, 3)} kulcs, legalább ${opts.minProfitKeys} kell.`),
+        check('WIN_RATE', 'risk', altBacktest.winRatePercent >= opts.minWinRatePercent, altBacktest.winRatePercent, opts.minWinRatePercent,
+          `A visszatesztben az időszak ${round(altBacktest.winRatePercent, 1)}%-ában lehetett volna ${label} áron felül eladni a tartási időn belül, ` +
+          `legalább ${opts.minWinRatePercent}% kell.`),
+        check('WIN_RATE_CONFIDENCE', 'risk',
+          altBacktest.winRatePercent < opts.minWinRatePercent || altBacktest.winRateLowerBoundPercent >= opts.minWinRatePercent,
+          altBacktest.winRateLowerBoundPercent, opts.minWinRatePercent,
+          `A ${round(altBacktest.winRatePercent, 1)}%-os nyerési arány nem elég meggyőző: ${altBacktest.independentTrades} független ügyletből ` +
+          `90%-os biztonsággal csak ${round(altBacktest.winRateLowerBoundPercent, 1)}% igazolható, ${opts.minWinRatePercent}% kell.`),
+        // A backpack.tf vételi árnál sokkal olcsóbb ajánlat szinte mindig rossz párosítás vagy eltérő változat
+        // (festék, spell, más effekt), nem valódi lehetőség
+        check('PRICE_SANITY', 'risk', priceRatio >= MIN_ALTERNATIVE_PRICE_RATIO, priceRatio, MIN_ALTERNATIVE_PRICE_RATIO,
+          `A(z) ${label} ár a backpack.tf medián vételi ár ${round(priceRatio, 0)}%-a; ${MIN_ALTERNATIVE_PRICE_RATIO}% alatt ` +
+          'gyanúsan olcsó (eltérő változat vagy hibás párosítás lehet).'),
+      ];
+      const altDecision = decide(altChecks, altExpected, altProfit, altBacktest, opts);
+
+      alternativeRoute = {
+        source: alternative.source,
+        label,
+        url: alternative.url ?? null,
+        price: alternative.price,
+        currency: alternative.currency,
+        stock: alternative.stock,
+        buyKeys: round(buy, 3),
+        recommendation: altDecision.recommendation,
+        isWorthBuying: altDecision.recommendation === 'BUY',
+        riskLevel: altDecision.riskLevel,
+        summary: summarize(altDecision.recommendation, altDecision.failed),
+        profit: {
+          expectedProfitKeys: round(altExpected, 3),
+          expectedMarginPercent: round(buy > 0 ? (altExpected / buy) * 100 : 0, 1),
+          conservativeProfitKeys: round(altProfit, 3),
+          conservativeMarginPercent: round(altMargin, 1),
+        },
+        risk: {
+          backtestIndependentTrades: altBacktest.independentTrades,
+          backtestWinRatePercent: round(altBacktest.winRatePercent, 1),
+          backtestWinRateLowerBoundPercent: round(altBacktest.winRateLowerBoundPercent, 1),
+        },
+        checks: altChecks.map((c) => ({ ...c, value: round(c.value, 3) })),
+      };
     }
 
-    const riskLevel =
-      recommendation === 'BUY' ? 'LOW'
-      : recommendation === 'WATCH' && !failedIn('risk') ? 'MEDIUM'
-      : 'HIGH';
+    // A legjobb útvonal: a vételre ajánlott közül a nagyobb óvatos hasznú, különben a jobb ajánlású
+    const routes = [
+      { source: 'bptf', recommendation, conservativeProfitKeys: round(conservativeProfit, 3) },
+      ...(alternativeRoute ? [{
+        source: alternativeRoute.source,
+        recommendation: alternativeRoute.recommendation,
+        conservativeProfitKeys: alternativeRoute.profit.conservativeProfitKeys,
+      }] : []),
+    ];
+    const bestRoute = routes.reduce((best, r) =>
+      RECOMMENDATION_RANK[r.recommendation] < RECOMMENDATION_RANK[best.recommendation] ||
+      (r.recommendation === best.recommendation && r.conservativeProfitKeys > best.conservativeProfitKeys) ? r : best);
 
     // Ajánlott legmagasabb vételi ár, amely mellett a küszöbök még teljesülnek
     const maxBuyPrice = Math.max(0, Math.min(
@@ -240,7 +384,9 @@ export class ArbitrageService {
       sku,
       itemName,
       recommendation,
-      isWorthBuying: recommendation === 'BUY',
+      isWorthBuying: recommendation === 'BUY' || alternativeRoute?.recommendation === 'BUY',
+      bestRoute,
+      alternative: alternativeRoute,
       riskLevel,
       summary: summarize(recommendation, failed),
       prices: {
@@ -278,13 +424,32 @@ export class ArbitrageService {
         dataAgeHours: round(dataAgeHours, 1),
         updatesPerDay: round(updatesPerDay),
         estimatedSaleSpeed,
+        holdingDays,
+        backtestDays,
       },
       checks: checks.map((c) => ({ ...c, value: round(c.value, 3) })),
       keyPrice: {
         currentMetal: currentKeyPrice ?? null,
         source: keyHistory ? 'history' : opts.keyPriceMetal ? 'fixed' : 'none',
       },
+      sales: sales ? { ...sales, expectedDaysToSell: sales.expectedDaysToSell === null ? null : round(sales.expectedDaysToSell, 1) } : null,
       settings: opts,
+      ...(withSeries ? {
+        series: {
+          // Az elemzett időszak árbejegyzései kulcsban: [idő (mp), vétel, eladás, kiugróként kiszűrve]
+          points: events.map((p, i) => [
+            p.t, round(p.buy, 4), round(p.sell, 4), !(i >= events.length - RECENT_POINTS || !isLocalOutlier(events, i)),
+          ] as [number, number, number, boolean]),
+          windowStart,
+          backtestStart,
+          holdingDays,
+          // A visszateszt hozamai százalékban (backpack.tf vétellel, illetve a másik piac fix árával)
+          backtestReturns: sampleList(backtest.returns.map((r) => round(r, 2)), MAX_SERIES_RETURNS),
+          alternativeReturns: alternativeRoute
+            ? sampleList(this.backtest(samples, holding, fee, alternative!.buyKeys).returns.map((r) => round(r, 2)), MAX_SERIES_RETURNS)
+            : null,
+        },
+      } : {}),
     };
   }
 
@@ -341,13 +506,17 @@ export class ArbitrageService {
    * Minden órai mintára: ha akkor veszel, és a tartási idő alatti eladási árak alsó negyedén (P25)
    * adod el, nyersz-e? A P25 pesszimista, de egy-egy rövid, pár órás árhiba nem dönti el egyedül.
    * Az egymást átfedő ügyletek nem függetlenek, ezért a konfidenciahatárhoz csak annyi ügyletet
-   * számolunk, ahány nem átfedő tartási idő belefér az időszakba.
+   * számolunk, ahány nem átfedő tartási idő belefér az időszakba. `fixedBuy` esetén minden ügylet ezen a
+   * vételi áron indul (egy másik piac jelenlegi ajánlata), így azt méri, mennyire volt rendszeresen eladható e fölött.
    */
-  private backtest(samples: Point[], holding: number, fee: number) {
+  private backtest(allSamples: Point[], holding: number, fee: number, fixedBuy?: number) {
+    // Hosszú tartásnál minden k-adik mintát nézzük, hogy egy tartási idő ~MAX_HORIZON_SAMPLES mintából álljon
+    const stride = Math.max(1, Math.ceil(holding / SAMPLE_STEP / MAX_HORIZON_SAMPLES));
+    const samples = stride === 1 ? allSamples : allSamples.filter((_, i) => i % stride === 0);
     const lastT = samples.length > 0 ? samples[samples.length - 1].t : 0;
     const returns: number[] = [];
     for (let i = 0; i < samples.length && samples[i].t + holding <= lastT; i++) {
-      const buy = samples[i].buy;
+      const buy = fixedBuy ?? samples[i].buy;
       if (buy <= 0) continue;
       const horizonSells: number[] = [];
       for (let j = i; j < samples.length && samples[j].t <= samples[i].t + holding; j++) {
@@ -357,7 +526,7 @@ export class ArbitrageService {
       returns.push(((exitSell * (1 - fee) - buy) / buy) * 100);
     }
 
-    const coveredSeconds = returns.length > 0 ? (returns.length - 1) * SAMPLE_STEP : 0;
+    const coveredSeconds = returns.length > 0 ? (returns.length - 1) * SAMPLE_STEP * stride : 0;
     const independentTrades = returns.length > 0 ? Math.floor(coveredSeconds / holding) + 1 : 0;
     const winShare = returns.length > 0 ? returns.filter((r) => r > 0).length / returns.length : 0;
 
@@ -366,6 +535,7 @@ export class ArbitrageService {
       winRatePercent: winShare * 100,
       winRateLowerBoundPercent: wilsonLowerBound(winShare * independentTrades, independentTrades) * 100,
       worstReturnPercent: returns.length > 0 ? Math.min(...returns) : 0,
+      returns,
     };
   }
 }
@@ -410,6 +580,47 @@ function stepValueAt(points: KeyPricePoint[], t: number): number {
     else hi = mid - 1;
   }
   return points[lo].metal;
+}
+
+/**
+ * Az ajánlás a nem teljesült ellenőrzésekből: veszteséges vagy a visszatesztben többnyire vesztes → AVOID;
+ * kevés az adat → INSUFFICIENT_DATA; minden teljesült → BUY; különben WATCH.
+ */
+function decide(
+  checks: Check[],
+  expectedProfit: number,
+  conservativeProfit: number,
+  backtest: { independentTrades: number; winRatePercent: number },
+  opts: AnalysisOptions,
+) {
+  const failed = checks.filter((c) => !c.passed);
+  const failedIn = (cat: CheckCategory) => failed.some((c) => c.category === cat);
+  const backtestReliable = backtest.independentTrades >= opts.minBacktestTrades;
+
+  let recommendation: Recommendation;
+  if (!(expectedProfit > 0) || !(conservativeProfit > 0) || (backtestReliable && backtest.winRatePercent < 50)) {
+    recommendation = 'AVOID';
+  } else if (failedIn('data')) {
+    recommendation = 'INSUFFICIENT_DATA';
+  } else if (failed.length === 0) {
+    recommendation = 'BUY';
+  } else {
+    recommendation = 'WATCH';
+  }
+
+  const riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' =
+    recommendation === 'BUY' ? 'LOW'
+    : recommendation === 'WATCH' && !failedIn('risk') ? 'MEDIUM'
+    : 'HIGH';
+
+  return { recommendation, riskLevel, failed };
+}
+
+/** Egyenletes ritkítás legfeljebb max elemre. */
+function sampleList<T>(list: T[], max: number): T[] {
+  if (list.length <= max) return list;
+  const step = list.length / max;
+  return Array.from({ length: max }, (_, i) => list[Math.floor(i * step)]);
 }
 
 function check(id: string, category: CheckCategory, passed: boolean, value: number, threshold: number, message: string): Check {

@@ -1,0 +1,102 @@
+@let d = deal();
+<mat-card appearance="outlined" [class]="'rec-' + d.recommendation">
+  <mat-card-header>
+    <mat-card-title>{{ d.name }}</mat-card-title>
+    <mat-card-subtitle>{{ label() }} · {{ d.sku }}</mat-card-subtitle>
+    @if (instant()) {
+      <span class="execution instant" matTooltip="Mindkét láb azonnal teljesül: meglévő ajánlatból veszed, meglévő buy ordernek adod el">
+        <mat-icon>bolt</mat-icon> Azonnali csere
+      </span>
+    } @else {
+      <span class="execution order" matTooltip="Saját buy ordert teszel, és meg kell várni, amíg valaki eladja neked">
+        <mat-icon>hourglass_top</mat-icon> Várni kell
+      </span>
+    }
+  </mat-card-header>
+
+  <mat-card-content>
+    <app-trade-route [plan]="plan()" />
+
+    @if (d.order; as o) {
+      <p class="order">
+        <mat-icon>gavel</mat-icon>
+        <span>
+          Buy order: <strong>{{ formatUsd(o.priceUsd) }}</strong> (a legmagasabb most {{ formatUsd(o.topBidUsd) }}).
+          @if (o.soldAtOrBelow !== null) {
+            Az elmúlt {{ o.windowDays }} napban {{ o.soldAtOrBelow }} darab kelt el a mannco-n ennyiért vagy olcsóbban.
+          } @else {
+            Az eladási adatok még töltődnek, ezért ez egyelőre csak a legmagasabb buy order + 1 cent.
+          }
+        </span>
+      </p>
+    }
+
+    <div class="facts">
+      @if (d.estimatedFillDays !== null) {
+        <span matTooltip="A mannco tényleges eladásai alapján becsülve; ennyi idő, mire a buy ordered teljesülhet.">
+          <mat-icon>hourglass_top</mat-icon> Teljesülés kb. {{ d.estimatedFillDays }} nap
+        </span>
+      }
+      @if (d.stock !== null) {
+        <span><mat-icon>inventory_2</mat-icon> {{ d.stock }} db a mannco-n</span>
+      }
+      <span matTooltip="A backpack.tf láb legrosszabb ára az elmúlt napok napi pillanatképeiben.">
+        <mat-icon>shield</mat-icon> Legrosszabb esetben {{ formatKeys(d.worstProfitKeys) }}
+      </span>
+      <span><mat-icon>schedule</mat-icon> bptf ár {{ d.bptfPriceAgeHours }} órás · mannco adat {{ d.manncoDataAgeMinutes }} perces</span>
+    </div>
+
+    @if (failedChecks().length) {
+      <ul class="warnings">
+        @for (check of failedChecks(); track check.id) {
+          <li><mat-icon>warning</mat-icon> {{ check.message }}</li>
+        }
+      </ul>
+    }
+
+    <mat-expansion-panel class="details">
+      <mat-expansion-panel-header>
+        <mat-panel-title>Ellenőrzések</mat-panel-title>
+        <mat-panel-description>
+          @if (failedChecks().length) {
+            {{ failedChecks().length }} nem teljesült
+          } @else {
+            mind teljesült
+          }
+        </mat-panel-description>
+      </mat-expansion-panel-header>
+      <ul class="checks">
+        @for (check of d.checks; track check.id) {
+          <li [class.failed]="!check.passed">
+            <mat-icon>{{ check.passed ? 'check_circle' : 'cancel' }}</mat-icon>
+            <span class="category">{{ categoryLabels[check.category] }}</span>
+            <span>{{ check.message }}</span>
+          </li>
+        }
+      </ul>
+    </mat-expansion-panel>
+  </mat-card-content>
+
+  <mat-card-actions>
+    <mat-slide-toggle
+      [checked]="d.notify"
+      (change)="notifyChange.emit($event.checked)"
+      matTooltip="Külön, részletes Discord üzenet, amikor erre a tárgyra új ajánlott üzlet vagy vételi lehetőség jelenik meg. Kikapcsolva az összefoglalóban sem szerepel."
+    >
+      Értesítés
+    </mat-slide-toggle>
+    <span class="links">
+      <button mat-button type="button" (click)="openStats()">
+        <mat-icon>insights</mat-icon> Statisztikák
+      </button>
+      <a mat-button [href]="d.bptfUrl" target="_blank" rel="noopener">
+        backpack.tf <mat-icon iconPositionEnd>open_in_new</mat-icon>
+      </a>
+      @if (d.manncoUrl) {
+        <a mat-button [href]="d.manncoUrl" target="_blank" rel="noopener">
+          mannco.store <mat-icon iconPositionEnd>open_in_new</mat-icon>
+        </a>
+      }
+    </span>
+  </mat-card-actions>
+</mat-card>

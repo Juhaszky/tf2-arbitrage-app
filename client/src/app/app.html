@@ -49,42 +49,232 @@
     </mat-card>
   }
 
+  <mat-card appearance="outlined" class="overview">
+    <div class="scan">
+      <mat-icon>travel_explore</mat-icon>
+      @if (store.screen(); as s) {
+        <span>
+          <strong>{{ count(s.scanned) }}</strong> tárgy átvizsgálva ·
+          <strong>{{ count(s.persistent) }}</strong> tartósan nyereséges ·
+          a legjobb <strong>{{ count(s.candidates) }}</strong> részletesen elemezve
+          <span class="muted">({{ timeAgo(s.screenedAt) }})</span>
+        </span>
+      } @else {
+        <span>A teljes piac átvizsgálása az első gyűjtéskor készül el.</span>
+      }
+    </div>
+    <div class="scan">
+      <mat-icon>storefront</mat-icon>
+      @if (store.mannco(); as m) {
+        @if (!m.configured) {
+          <span class="muted">mannco.store: nincs beállítva (<code>MANNCO_API_KEY</code> a <code>server/.env</code> fájlban)</span>
+        } @else if (m.matched !== null) {
+          <span>
+            mannco.store: <strong>{{ count(m.matched) }}</strong> tárgy párosítva ·
+            most <strong>{{ count(m.profitableNow ?? 0) }}</strong> nyereséges vétel ·
+            kulcs {{ m.keyPriceUsd }} $
+          </span>
+        } @else {
+          <span class="muted">mannco.store: az árlista a következő gyűjtéskor töltődik le.</span>
+        }
+      }
+    </div>
+    <mat-slide-toggle
+      [checked]="store.notifyAllBuys()"
+      (change)="store.setNotifyAllBuys($event.checked)"
+      matTooltip="Minden automatikus keresés után egy Discord üzenet az újonnan talált vételi lehetőségekről (hosszabb távú és azonnali üzletek), a legjobb 10 részletesen. Ha egy tárgynál kikapcsolod az értesítést, az összefoglalóban sem szerepel."
+    >
+      Összefoglaló értesítés az új vételi lehetőségekről
+    </mat-slide-toggle>
+  </mat-card>
+
   <app-add-item />
 
-  <div class="list-header">
+  <app-market-filter />
+
+  <div class="view-switch">
     <mat-button-toggle-group
-      [value]="store.filter()"
-      (change)="store.filter.set($event.value)"
+      [value]="store.view()"
+      (change)="store.view.set($event.value)"
       hideSingleSelectionIndicator
-      aria-label="Szűrés ajánlás szerint"
+      aria-label="Nézet"
     >
-      @for (filter of filters; track filter.value) {
-        <mat-button-toggle [value]="filter.value">
-          {{ filter.label }} <span class="count">{{ store.counts()[filter.value] }}</span>
-        </mat-button-toggle>
-      }
+      <mat-button-toggle value="analysis">
+        <mat-icon>insights</mat-icon> Hosszabb távú lehetőségek
+        <span class="count">{{ store.counts().BUY }}</span>
+      </mat-button-toggle>
+      <mat-button-toggle value="deals">
+        <mat-icon>bolt</mat-icon> Azonnali üzletek
+        <span class="count">{{ store.dealCounts().BUY }}</span>
+      </mat-button-toggle>
     </mat-button-toggle-group>
-    <span class="updated">Elemezve: {{ timeAgo(store.analyzedAt()) }}</span>
+    <span class="updated">
+      @if (store.view() === 'analysis') {
+        Vétel, tartás, majd eladás hirdetéssel · elemezve: {{ timeAgo(store.analyzedAt()) }}
+      } @else {
+        Vétel és azonnali továbbadás, tartás nélkül · frissítve: {{ timeAgo(store.dealsGeneratedAt()) }}
+      }
+    </span>
   </div>
 
-  @if (!store.loaded()) {
-    <div class="center"><mat-progress-spinner mode="indeterminate" diameter="40" /></div>
+  <div class="route-filter">
+    <span class="route-filter-label">Hol veszed → hol adod el:</span>
+    <mat-chip-listbox
+      [value]="store.routeFilter()"
+      (change)="store.routeFilter.set($event.value ?? 'ALL')"
+      aria-label="Szűrés útvonal szerint"
+    >
+      <mat-chip-option value="ALL">Mind <span class="count">{{ store.routeCounts().ALL }}</span></mat-chip-option>
+      @for (route of store.routes; track route) {
+        @let from = route.split('>')[0];
+        @let to = route.split('>')[1];
+        <mat-chip-option [value]="route" [disabled]="!store.routeCounts()[route] && store.routeFilter() !== route">
+          <span class="route-chip">
+            <span [class]="'dot market-' + from"></span>{{ marketLabels[from] }}
+            <mat-icon>arrow_forward</mat-icon>
+            <span [class]="'dot market-' + to"></span>{{ marketLabels[to] }}
+          </span>
+          <span class="count">{{ store.routeCounts()[route] }}</span>
+        </mat-chip-option>
+      }
+    </mat-chip-listbox>
+  </div>
+
+  @if (store.view() === 'analysis') {
+    <div class="list-header">
+      <mat-button-toggle-group
+        [value]="store.filter()"
+        (change)="store.filter.set($event.value)"
+        hideSingleSelectionIndicator
+        aria-label="Szűrés ajánlás szerint"
+      >
+        @for (filter of filters; track filter.value) {
+          <mat-button-toggle [value]="filter.value">
+            {{ filter.label }} <span class="count">{{ store.counts()[filter.value] }}</span>
+          </mat-button-toggle>
+        }
+      </mat-button-toggle-group>
+      <app-sort-control
+        [options]="store.itemSorts"
+        [state]="store.itemSort()"
+        (sortChange)="store.setSort('analysis', $event)"
+        (dirToggle)="store.toggleSortDir('analysis')"
+      />
+    </div>
+
+    @if (!store.loaded()) {
+      <div class="center"><mat-progress-spinner mode="indeterminate" diameter="40" /></div>
+    } @else {
+      <section class="items">
+        @for (item of store.shownItems(); track item.sku) {
+          <app-item-card
+            [item]="item"
+            [collectorRunning]="store.collectorRunning()"
+            (notifyChange)="store.setNotify(item, $event)"
+          />
+        } @empty {
+          <div class="empty">
+            <mat-icon>inventory_2</mat-icon>
+            @if (store.items().length === 0) {
+              <p>Még nincs elemzett tárgy. Az első gyűjtés átvizsgálja a teljes piacot – ez néhány percig tart.</p>
+            } @else if (store.routeFilter() !== 'ALL') {
+              <p>Ezen az útvonalon nincs ilyen ajánlású tárgy. Válaszd a „Mind” útvonalat, vagy másik ajánlást.</p>
+            } @else if (store.filter() === 'BUY') {
+              <p>Jelenleg egy tárgyat sem érdemes megvenni. A többi ajánlást az „Összes” fülön látod.</p>
+            } @else {
+              <p>Nincs ilyen ajánlású tárgy.</p>
+            }
+          </div>
+        }
+        @if (store.visibleItems().length > 0) {
+          <div class="more" appInfiniteScroll [hasMore]="store.shownItems().length < store.visibleItems().length" (reached)="store.loadMore('analysis')">
+            <span>{{ count(store.shownItems().length) }} / {{ count(store.visibleItems().length) }} megjelenítve</span>
+            @if (store.shownItems().length < store.visibleItems().length) {
+              <button mat-stroked-button type="button" (click)="store.loadMore('analysis')">Továbbiak betöltése</button>
+            }
+          </div>
+        }
+      </section>
+    }
   } @else {
+    <div class="execution-filter">
+      <span class="route-filter-label">Végrehajtás:</span>
+      <mat-button-toggle-group
+        [value]="store.executionFilter()"
+        (change)="store.executionFilter.set($event.value)"
+        hideSingleSelectionIndicator
+        aria-label="Szűrés végrehajtás szerint"
+      >
+        <mat-button-toggle value="ALL">Mind <span class="count">{{ store.executionCounts().ALL }}</span></mat-button-toggle>
+        <mat-button-toggle
+          value="INSTANT"
+          matTooltip="Megveszed egy meglévő ajánlatból, és azonnal eladod egy meglévő buy ordernek – nem kell várni"
+        >
+          <mat-icon>bolt</mat-icon> Azonnali csere <span class="count">{{ store.executionCounts().INSTANT }}</span>
+        </mat-button-toggle>
+        <mat-button-toggle
+          value="ORDER"
+          matTooltip="Saját buy ordert teszel a mannco-n, és meg kell várni, amíg valaki eladja neked"
+        >
+          <mat-icon>hourglass_top</mat-icon> Saját buy order <span class="count">{{ store.executionCounts().ORDER }}</span>
+        </mat-button-toggle>
+      </mat-button-toggle-group>
+    </div>
+
+    <div class="list-header">
+      <mat-button-toggle-group
+        [value]="store.dealFilter()"
+        (change)="store.dealFilter.set($event.value)"
+        hideSingleSelectionIndicator
+        aria-label="Szűrés ajánlás szerint"
+      >
+        <mat-button-toggle value="BUY">Ajánlott <span class="count">{{ store.dealCounts().BUY }}</span></mat-button-toggle>
+        <mat-button-toggle value="ALL">Összes <span class="count">{{ store.dealCounts().ALL }}</span></mat-button-toggle>
+      </mat-button-toggle-group>
+      <app-sort-control
+        [options]="store.dealSorts"
+        [state]="store.dealSort()"
+        (sortChange)="store.setSort('deals', $event)"
+        (dirToggle)="store.toggleSortDir('deals')"
+      />
+    </div>
+    <div class="list-subheader">
+      @if (store.dealsCoverage(); as c) {
+        <span
+          class="updated"
+          matTooltip="A mannco buy ordereket percenként csak ~1000 tárgyra lehet lekérni, ezért futásonként forgó sorrendben frissülnek."
+        >
+          mannco buy order adat: {{ count(c.bidsFresh) }} / {{ count(c.matched) }} tárgyra friss
+        </span>
+      }
+    </div>
+
     <section class="items">
-      @for (item of store.visibleItems(); track item.sku) {
-        <app-item-card
-          [item]="item"
-          [collectorRunning]="store.collectorRunning()"
-          (notifyChange)="store.setNotify(item, $event)"
-          (remove)="store.remove(item)"
+      @for (deal of store.shownDeals(); track deal.id) {
+        <app-deal-card
+          [deal]="deal"
+          [label]="store.dealLabels()?.[deal.type] ?? ''"
+          (notifyChange)="store.setNotify(deal, $event)"
         />
       } @empty {
         <div class="empty">
-          <mat-icon>inventory_2</mat-icon>
-          @if (store.items().length === 0) {
-            <p>Még nem követsz egy tárgyat sem. Keress rá fent, és add hozzá.</p>
+          <mat-icon>bolt</mat-icon>
+          @if (store.mannco()?.configured === false) {
+            <p>Az azonnali üzletekhez mannco.store API kulcs kell (<code>MANNCO_API_KEY</code> a <code>server/.env</code> fájlban).</p>
+          } @else if (store.deals().length === 0) {
+            <p>Még nincs azonnali üzlet. A következő gyűjtés megkeresi őket – ez néhány percig tart.</p>
+          } @else if (store.dealFilter() === 'BUY') {
+            <p>Most nincs ajánlott azonnali üzlet. A kockázatosabbakat az „Összes” fülön látod.</p>
           } @else {
-            <p>Nincs ilyen ajánlású tárgy.</p>
+            <p>Ezen az útvonalon nincs azonnali üzlet.</p>
+          }
+        </div>
+      }
+      @if (store.visibleDeals().length > 0) {
+        <div class="more" appInfiniteScroll [hasMore]="store.shownDeals().length < store.visibleDeals().length" (reached)="store.loadMore('deals')">
+          <span>{{ count(store.shownDeals().length) }} / {{ count(store.visibleDeals().length) }} megjelenítve</span>
+          @if (store.shownDeals().length < store.visibleDeals().length) {
+            <button mat-stroked-button type="button" (click)="store.loadMore('deals')">Továbbiak betöltése</button>
           }
         </div>
       }

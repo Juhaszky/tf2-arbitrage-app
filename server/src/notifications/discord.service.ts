@@ -2,6 +2,8 @@ import { config } from '../config';
 
 interface DiscordEmbed {
   title: string;
+  /** A cím linkje (pl. a tárgy oldala a mannco.store-on). */
+  url?: string;
   description?: string;
   color?: number;
   fields?: { name: string; value: string; inline?: boolean }[];

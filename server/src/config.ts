@@ -6,31 +6,35 @@ const num = (name: string, fallback: number) => {
   return process.env[name] !== undefined && process.env[name] !== '' && Number.isFinite(value) ? value : fallback;
 };
 
-// JSON tömb (["722;11","40;11;kt-3"]) vagy vesszővel elválasztott lista (722;11,40;11;kt-3)
-const skuList = (raw: string | undefined): string[] => {
-  if (!raw?.trim()) return [];
-  const trimmed = raw.trim();
-  const list: unknown = trimmed.startsWith('[') ? JSON.parse(trimmed) : trimmed.split(',');
-  if (!Array.isArray(list)) throw new Error('A TRACKED_SKUS JSON tömb vagy vesszővel elválasztott lista kell legyen.');
-  return [...new Set(list.map((s) => String(s).trim()).filter(Boolean))];
-};
-
 export const KEY_SKU = '5021;6';
 
 export const config = {
   pricedbBaseUrl: process.env.PRICEDB_BASE_URL ?? 'https://pricedb.io/api',
   dataDir: path.resolve(process.env.DATA_DIR ?? './data'),
   discordWebhookUrl: process.env.DISCORD_WEBHOOK_URL?.trim() || undefined,
+  /** mannco.store API kulcs; nélküle a mannco ajánlatok kimaradnak az elemzésből. */
+  manncoApiKey: process.env.MANNCO_API_KEY?.trim() || undefined,
 
   collector: {
     enabled: process.env.COLLECTOR_ENABLED !== 'false',
     cron: process.env.COLLECT_CRON ?? '*/30 * * * *',
     runOnStartup: process.env.COLLECT_ON_STARTUP !== 'false',
-    trackedSkus: skuList(process.env.TRACKED_SKUS),
     historyRefreshMinutes: num('HISTORY_REFRESH_MINUTES', 120),
-    maxSkusPerRun: num('MAX_SKUS_PER_RUN', 20),
-    requestDelayMs: num('REQUEST_DELAY_MS', 3000),
+    maxSkusPerRun: num('MAX_SKUS_PER_RUN', 200),
+    requestDelayMs: num('REQUEST_DELAY_MS', 1000),
     itemsRefreshHours: num('ITEMS_REFRESH_HOURS', 24),
+  },
+
+  mannco: {
+    /** Futásonként legfeljebb ennyi tömeges árazó kérés a buy orderekhez (kérésenként 100 tárgy, percenként 10 mehet). */
+    bidRequestsPerRun: num('MANNCO_BID_REQUESTS_PER_RUN', 30),
+  },
+
+  market: {
+    /** Az előszűrés után vételi útvonalanként (backpack.tf, mannco.store) legfeljebb ennyi tárgy kap teljes (history alapú) elemzést. */
+    maxCandidates: num('MAX_CANDIDATES', 150),
+    /** Az előszűrés ennyi napi pillanatképen nézi, hogy az árrés tartós-e. */
+    snapshotDays: num('SCREEN_SNAPSHOT_DAYS', 7),
   },
 };
 

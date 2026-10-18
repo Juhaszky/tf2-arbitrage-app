@@ -1,0 +1,51 @@
+<mat-card appearance="outlined" class="filter">
+  <form class="row" (submit)="$event.preventDefault(); apply()">
+    <div class="price">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Vételi ár -tól</mat-label>
+        <input matInput type="text" inputmode="decimal" autocomplete="off" [value]="draft().minKeys ?? ''" (input)="setMin($event)" />
+        <span matTextSuffix>kulcs</span>
+      </mat-form-field>
+      <span class="dash">–</span>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>-ig</mat-label>
+        <input matInput type="text" inputmode="decimal" autocomplete="off" [value]="draft().maxKeys ?? ''" (input)="setMax($event)" />
+        <span matTextSuffix>kulcs</span>
+      </mat-form-field>
+    </div>
+
+    <div class="actions">
+      <button mat-stroked-button type="button" (click)="clear()" [disabled]="!active() && !dirty()">
+        <mat-icon>filter_alt_off</mat-icon> Törlés
+      </button>
+      <button mat-flat-button type="submit" [disabled]="!dirty() || invalid()">
+        <mat-icon>filter_alt</mat-icon> Alkalmaz
+      </button>
+    </div>
+  </form>
+
+  <mat-chip-listbox
+    multiple
+    aria-label="Típus"
+    [value]="draft().qualities"
+    (change)="setQualities($event.value)"
+  >
+    @for (quality of store.qualityOptions(); track quality.id) {
+      <mat-chip-option [value]="quality.id">{{ quality.label }}</mat-chip-option>
+    }
+  </mat-chip-listbox>
+
+  <p class="hint">
+    @if (invalid()) {
+      <span class="error">A „-tól” ár nem lehet nagyobb az „-ig” árnál.</span>
+    } @else if (store.filterPending()) {
+      <mat-icon>hourglass_top</mat-icon> Az új szűrő szerinti jelöltek keresése és elemzése folyamatban…
+    } @else {
+      A szűrő a teljes piacon érvényes: a részletes elemzés a megadott ártartományú és típusú tárgyak közül a legjobbakra fut.
+      Típus nélkül mind látszik.
+      @if (store.hiddenByFilter()) {
+        {{ store.hiddenByFilter() }} korábban elemzett tárgyat elrejt.
+      }
+    }
+  </p>
+</mat-card>

@@ -1,0 +1,155 @@
+:host {
+  display: block;
+}
+
+mat-card {
+  border-left: 4px solid var(--rec-color, var(--mat-sys-outline-variant));
+}
+
+.rec-BUY { --rec-color: var(--app-buy); }
+.rec-WATCH { --rec-color: var(--app-watch); }
+
+mat-card-header {
+  padding-bottom: 8px;
+}
+
+mat-card-title {
+  overflow-wrap: anywhere;
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 12px 0 8px;
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.facts span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.facts mat-icon,
+.warnings mat-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}
+
+.warnings {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font: var(--mat-sys-body-small);
+  color: var(--app-watch);
+}
+
+.warnings li {
+  display: flex;
+  gap: 6px;
+}
+
+.warnings mat-icon {
+  flex: none;
+  margin-top: 1px;
+}
+
+.checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font: var(--mat-sys-body-medium);
+}
+
+.checks li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.checks mat-icon {
+  flex: none;
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  color: var(--app-buy);
+}
+
+.checks li.failed mat-icon {
+  color: var(--app-avoid);
+}
+
+.category {
+  flex: none;
+  min-width: 64px;
+  font: var(--mat-sys-label-medium);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+mat-card-actions {
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 8px 16px 12px;
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.order {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 12px 0 0;
+  font: var(--mat-sys-body-medium);
+}
+
+.order mat-icon {
+  flex: none;
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  color: var(--app-mannco);
+}
+
+mat-card-header {
+  align-items: flex-start;
+}
+
+.execution {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px 4px 8px;
+  border-radius: 999px;
+  font: var(--mat-sys-label-large);
+  white-space: nowrap;
+}
+
+.execution mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.execution.instant {
+  color: var(--app-buy);
+  background: var(--app-buy-bg);
+}
+
+.execution.order {
+  color: var(--mat-sys-on-surface-variant);
+  background: var(--mat-sys-surface-container-high);
+}

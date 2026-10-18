@@ -1,0 +1,36 @@
+@let p = plan();
+<div class="route" [class.secondary]="secondary()" [class.best]="p.best && !secondary()">
+  <div class="step" [class]="'step market-' + p.buy.market">
+    <span class="step-label"><mat-icon>shopping_cart</mat-icon> Vétel</span>
+    @if (p.buy.url) {
+      <a class="market" [href]="p.buy.url" target="_blank" rel="noopener">
+        {{ marketLabels[p.buy.market] }} <mat-icon>open_in_new</mat-icon>
+      </a>
+    } @else {
+      <span class="market">{{ marketLabels[p.buy.market] }}</span>
+    }
+    <span class="how">{{ p.buy.how }}</span>
+    <span class="price">{{ p.buy.price }}</span>
+  </div>
+
+  <mat-icon class="arrow" aria-hidden="true">arrow_forward</mat-icon>
+
+  <div class="step" [class]="'step market-' + p.sell.market">
+    <span class="step-label"><mat-icon>sell</mat-icon> Eladás</span>
+    @if (p.sell.url) {
+      <a class="market" [href]="p.sell.url" target="_blank" rel="noopener">
+        {{ marketLabels[p.sell.market] }} <mat-icon>open_in_new</mat-icon>
+      </a>
+    } @else {
+      <span class="market">{{ marketLabels[p.sell.market] }}</span>
+    }
+    <span class="how">{{ p.sell.how }}</span>
+    <span class="price">{{ p.sell.price }}</span>
+  </div>
+
+  <div class="result">
+    <span class="profit" [class.negative]="p.profitKeys < 0">{{ formatKeys(p.profitKeys) }}</span>
+    <span class="margin">{{ formatPercent(p.marginPercent) }} haszon</span>
+    <span class="rec" [class]="'rec badge-' + p.recommendation">{{ recommendationLabels[p.recommendation] }}</span>
+  </div>
+</div>

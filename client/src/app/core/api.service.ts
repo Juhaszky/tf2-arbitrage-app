@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { ItemSearchResult, TrackedItem, TrackedResponse } from './models';
+import { DealsResponse, ItemSearchResult, ItemStats, MarketFilter, MarketResponse } from './models';
 
 const sku = (value: string) => encodeURIComponent(value);
 
@@ -8,20 +8,28 @@ const sku = (value: string) => encodeURIComponent(value);
 export class ApiService {
   private readonly http = inject(HttpClient);
 
-  getTracked() {
-    return this.http.get<TrackedResponse>('/api/tracked');
+  getMarket() {
+    return this.http.get<MarketResponse>('/api/market');
   }
 
-  addTracked(itemSku: string, notify = true) {
-    return this.http.post<TrackedItem>('/api/tracked', { sku: itemSku, notify });
+  getItemStats(itemSku: string) {
+    return this.http.get<ItemStats>(`/api/items/${sku(itemSku)}/stats`);
   }
 
-  setNotify(itemSku: string, notify: boolean) {
-    return this.http.patch<TrackedItem>(`/api/tracked/${sku(itemSku)}`, { notify });
+  getDeals() {
+    return this.http.get<DealsResponse>('/api/deals');
   }
 
-  removeTracked(itemSku: string) {
-    return this.http.delete<void>(`/api/tracked/${sku(itemSku)}`);
+  setFilter(filter: MarketFilter) {
+    return this.http.put<MarketFilter>('/api/market/filter', filter);
+  }
+
+  setItemNotify(itemSku: string, notify: boolean) {
+    return this.http.put<{ sku: string; name: string; notify: boolean }>(`/api/notifications/items/${sku(itemSku)}`, { notify });
+  }
+
+  setNotifyAllBuys(notifyAllBuys: boolean) {
+    return this.http.put<{ notifyAllBuys: boolean }>('/api/notifications/settings', { notifyAllBuys });
   }
 
   searchItems(query: string) {

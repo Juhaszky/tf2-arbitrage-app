@@ -6,6 +6,28 @@
   --app-watch-bg: light-dark(#fdf0dc, #3d2e12);
   --app-avoid: light-dark(#b3261e, #ffb4ab);
   --app-avoid-bg: light-dark(#fce4e2, #44201d);
+
+  /* A piacok színei: hol veszed, hol adod el */
+  --app-bptf: light-dark(#1f5fa8, #8ab8f0);
+  --app-bptf-bg: light-dark(#e3eefb, #1a2c42);
+  --app-mannco: light-dark(#a6480f, #f4a26b);
+  --app-mannco-bg: light-dark(#fcebdf, #40261a);
+
+  /*
+   * Diagramok (validált kategorikus paletta, 1–3. hely; világos és sötét mód külön lépcsővel).
+   * A 3. hely (akvamarin) világos módban 3:1 alatt van a felülethez képest, ezért mindig van jelmagyarázat és táblázat.
+   */
+  --chart-1: light-dark(#2a78d6, #3987e5);
+  --chart-2: light-dark(#eb6834, #d95926);
+  --chart-3: light-dark(#1baf7a, #199e70);
+  /* Kétpólusú (nyereség / veszteség) */
+  --chart-positive: light-dark(#2a78d6, #3987e5);
+  --chart-negative: light-dark(#e34948, #e66767);
+  /* Állapot (teljesült / nem teljesült) – mindig ikonnal és szöveggel együtt */
+  --chart-good: #0ca30c;
+  --chart-critical: #d03b3b;
+  --chart-grid: var(--mat-sys-outline-variant);
+  --chart-surface: var(--mat-sys-surface);
 }
 
 code {

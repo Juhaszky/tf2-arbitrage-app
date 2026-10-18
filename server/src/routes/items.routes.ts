@@ -1,9 +1,12 @@
 import { Router } from 'express';
-import { searchItems } from '../controllers/tracked.controller';
+import { getItemStats, searchItems } from '../controllers/items.controller';
 
 const router = Router();
 
 // GET /api/items/search?q=...
 router.get('/search', searchItems);
+
+// GET /api/items/:sku/stats
+router.get('/:sku/stats', getItemStats);
 
 export default router;

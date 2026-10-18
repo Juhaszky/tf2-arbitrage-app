@@ -8,7 +8,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { catchError, debounceTime, distinctUntilChanged, finalize, map, of, switchMap, tap } from 'rxjs';
 import { ApiService } from '../core/api.service';
 import { ItemSearchResult } from '../core/models';
-import { TrackedStore } from '../core/tracked.store';
+import { MarketStore } from '../core/market.store';
 
 const MIN_QUERY = 2;
 
@@ -21,7 +21,7 @@ const MIN_QUERY = 2;
 })
 export class AddItem {
   private readonly api = inject(ApiService);
-  protected readonly store = inject(TrackedStore);
+  protected readonly store = inject(MarketStore);
 
   protected readonly query = signal('');
   protected readonly searching = signal(false);
@@ -56,6 +56,6 @@ export class AddItem {
   protected select(event: MatAutocompleteSelectedEvent) {
     const item = event.option.value as ItemSearchResult;
     this.query.set('');
-    void this.store.add(item);
+    void this.store.watch(item);
   }
 }

@@ -1,4 +1,4 @@
-import { Money, Recommendation, RiskLevel } from './models';
+import { Analysis, Money, Recommendation, RiskLevel } from './models';
 
 export const RECOMMENDATION_LABELS: Record<Recommendation, string> = {
   BUY: 'Vétel',
@@ -19,6 +19,15 @@ export const RISK_LABELS: Record<RiskLevel, string> = {
   MEDIUM: 'Közepes',
   HIGH: 'Magas',
 };
+
+/** A legjobb útvonal ajánlása (a korábbi, mannco előtti elemzésekben a backpack.tf útvonalé). */
+export const bestRecommendation = (a: Analysis): Recommendation => a.bestRoute?.recommendation ?? a.recommendation;
+
+/** A legjobb útvonal óvatos haszna kulcsban. */
+export const bestProfitKeys = (a: Analysis): number => a.bestRoute?.conservativeProfitKeys ?? a.profit.conservativeProfitKeys;
+
+export const formatUsd = (value: number) =>
+  value.toLocaleString('hu-HU', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
 
 const number = (value: number, digits = 2) =>
   value.toLocaleString('hu-HU', { maximumFractionDigits: digits });

@@ -1,18 +1,31 @@
 @let a = analysis();
-<mat-card appearance="outlined" [class]="'rec-' + (a?.recommendation ?? 'NONE')">
+@let rec = recommendation();
+@let m = alternative();
+<mat-card appearance="outlined" [class]="'rec-' + (rec ?? 'NONE')">
   <mat-card-header>
     <mat-card-title>{{ item().name }}</mat-card-title>
     <mat-card-subtitle>{{ item().sku }} · frissítve {{ timeAgo(item().lastFetchedAt) }}</mat-card-subtitle>
-    @if (a) {
-      <span class="badge" [class]="'badge badge-' + a.recommendation">
-        <mat-icon>{{ recommendationIcons[a.recommendation] }}</mat-icon>
-        {{ recommendationLabels[a.recommendation] }}
+    @if (rec) {
+      <span class="badge" [class]="'badge badge-' + rec">
+        <mat-icon>{{ recommendationIcons[rec] }}</mat-icon>
+        {{ recommendationLabels[rec] }}
+        @if (bestIsMannco()) {
+          <small>· mannco.store</small>
+        }
       </span>
     }
   </mat-card-header>
 
   <mat-card-content>
     @if (a) {
+      <section class="plans" aria-label="Hol vedd, hol add el">
+        <h3 class="section-title">Hol vedd, hol add el</h3>
+        @for (plan of plans(); track plan.route; let first = $first) {
+          <app-trade-route [plan]="plan" [secondary]="!first" />
+        }
+      </section>
+
+      <h3 class="section-title">backpack.tf elemzés</h3>
       <div class="stats">
         <div class="stat" matTooltip="Ennél többet ne fizess: ezen az áron még teljesül a minimális haszon.">
           <span class="label">Max. vételi ár</span>
@@ -22,10 +35,10 @@
           <span class="label">Javasolt eladási ár</span>
           <span class="value">{{ formatMoney(a.prices.targetSell, a.prices.targetSellKeys) }}</span>
         </div>
-        <div class="stat" matTooltip="Óvatos (pesszimista) becslés; zárójelben a tipikus árakkal várható haszon.">
+        <div class="stat" matTooltip="Óvatos (pesszimista) becslés darabonként; a lista ez szerint van rendezve. Zárójelben a tipikus árakkal várható haszonkulcs.">
           <span class="label">Óvatos haszon</span>
-          <span class="value" [class.negative]="a.profit.conservativeMarginPercent < 0">
-            {{ formatPercent(a.profit.conservativeMarginPercent) }}
+          <span class="value" [class.negative]="a.profit.conservativeProfitKeys < 0">
+            {{ formatKeys(a.profit.conservativeProfitKeys) }} · {{ formatPercent(a.profit.conservativeMarginPercent) }}
             <small>(várható {{ formatPercent(a.profit.expectedMarginPercent) }})</small>
           </span>
         </div>
@@ -66,23 +79,104 @@
           }
         </ul>
       </mat-expansion-panel>
+
+      @if (m) {
+        <section class="route mannco" [class.best]="bestIsMannco()">
+          <div class="route-head">
+            <mat-icon>storefront</mat-icon>
+            <span>mannco.store vétel részletei</span>
+            @if (m.url) {
+              <a mat-button class="open" [href]="m.url" target="_blank" rel="noopener">
+                Megnyitás <mat-icon iconPositionEnd>open_in_new</mat-icon>
+              </a>
+            }
+          </div>
+          <div class="stats">
+            <div class="stat" matTooltip="A legolcsóbb mannco.store ajánlat, a mannco saját kulcsárával kulcsra váltva.">
+              <span class="label">Ár ({{ m.stock }} db elérhető)</span>
+              <span class="value">{{ formatUsd(m.price) }} <small>≈ {{ formatKeys(m.buyKeys) }}</small></span>
+            </div>
+            <div class="stat" matTooltip="Óvatos becslés: a backpack.tf óvatos eladási ára mínusz a mannco ár.">
+              <span class="label">Óvatos haszon</span>
+              <span class="value" [class.negative]="m.profit.conservativeProfitKeys < 0">
+                {{ formatKeys(m.profit.conservativeProfitKeys) }} · {{ formatPercent(m.profit.conservativeMarginPercent) }}
+                <small>(várható {{ formatPercent(m.profit.expectedMarginPercent) }})</small>
+              </span>
+            </div>
+            <div class="stat" matTooltip="Az elmúlt 90 napban az idő hány százalékában lehetett volna a tartási időn belül e fölött eladni backpack.tf-en.">
+              <span class="label">Visszateszt</span>
+              <span class="value">{{ formatPercent(m.risk.backtestWinRatePercent) }} nyerő</span>
+            </div>
+            <div class="stat">
+              <span class="label">Kockázat</span>
+              <span class="value" [class]="'value risk-' + m.riskLevel">{{ riskLabels[m.riskLevel] }}</span>
+            </div>
+          </div>
+          <p class="summary">{{ m.summary }}</p>
+          <mat-expansion-panel class="details">
+            <mat-expansion-panel-header>
+              <mat-panel-title>mannco.store ellenőrzések</mat-panel-title>
+              <mat-panel-description>
+                @if (failedAlternativeChecks()) {
+                  {{ failedAlternativeChecks() }} nem teljesült
+                } @else {
+                  mind teljesült
+                }
+              </mat-panel-description>
+            </mat-expansion-panel-header>
+            <ul class="checks">
+              @for (check of m.checks; track check.id) {
+                <li [class.failed]="!check.passed">
+                  <mat-icon>{{ check.passed ? 'check_circle' : 'cancel' }}</mat-icon>
+                  <span class="category">{{ categoryLabels[check.category] }}</span>
+                  <span>{{ check.message }}</span>
+                </li>
+              }
+            </ul>
+          </mat-expansion-panel>
+        </section>
+      }
     } @else if (item().error) {
       <p class="message error"><mat-icon>error</mat-icon> {{ item().error }}</p>
     } @else {
       <p class="message">
         <mat-icon>{{ collectorRunning() ? 'downloading' : 'schedule' }}</mat-icon>
         {{ collectorRunning() ? 'Az adatok letöltése folyamatban…' : 'Még nincs elemzés – a következő gyűjtéskor elkészül.' }}
+        @if (item().screen; as s) {
+          Jelenlegi árrés: {{ formatKeys(s.profitKeys) }} ({{ formatPercent(s.marginPercent) }}).
+        }
       </p>
     }
   </mat-card-content>
 
   <mat-card-actions>
-    <mat-slide-toggle [checked]="item().notify" (change)="notifyChange.emit($event.checked)">
-      Discord értesítés
+    <mat-slide-toggle
+      [checked]="item().notify"
+      (change)="notifyChange.emit($event.checked)"
+      matTooltip="Külön, részletes Discord üzenet, amikor a tárgy vételre vált, vagy már nem ajánlott. Kikapcsolva az összefoglalóban sem szerepel."
+    >
+      Értesítés
     </mat-slide-toggle>
-    <span class="spacer"></span>
-    <button mat-icon-button (click)="remove.emit()" matTooltip="Követés megszüntetése" aria-label="Követés megszüntetése">
-      <mat-icon>delete</mat-icon>
-    </button>
+    <span class="links">
+      <button mat-button type="button" (click)="openStats()">
+        <mat-icon>insights</mat-icon> Statisztikák
+      </button>
+      <a mat-button [href]="item().bptfUrl" target="_blank" rel="noopener">
+        backpack.tf <mat-icon iconPositionEnd>open_in_new</mat-icon>
+      </a>
+      @if (m?.url) {
+        <a mat-button [href]="m!.url" target="_blank" rel="noopener">
+          mannco.store <mat-icon iconPositionEnd>open_in_new</mat-icon>
+        </a>
+      }
+    </span>
+    @if (!item().screen) {
+      <span
+        class="origin"
+        matTooltip="Az előszűrés most nem választotta ki, de mivel értesítést kértél rá, folyamatosan elemezzük."
+      >
+        <mat-icon>push_pin</mat-icon> Saját kérésre elemezve
+      </span>
+    }
   </mat-card-actions>
 </mat-card>

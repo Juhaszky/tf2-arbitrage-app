@@ -3,9 +3,10 @@ import express from 'express';
 import cors from 'cors';
 import arbitrageRoutes from './routes/arbitrage.routes';
 import collectorRoutes from './routes/collector.routes';
+import dealsRoutes from './routes/deals.routes';
 import itemsRoutes from './routes/items.routes';
+import marketRoutes from './routes/market.routes';
 import notificationsRoutes from './routes/notifications.routes';
-import trackedRoutes from './routes/tracked.routes';
 import { startCollector } from './collector/scheduler';
 
 const app = express();
@@ -16,7 +17,8 @@ app.use(cors());
 // Útvonalak bekötése
 app.use('/api/arbitrage', arbitrageRoutes);
 app.use('/api/collector', collectorRoutes);
-app.use('/api/tracked', trackedRoutes);
+app.use('/api/market', marketRoutes);
+app.use('/api/deals', dealsRoutes);
 app.use('/api/items', itemsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 

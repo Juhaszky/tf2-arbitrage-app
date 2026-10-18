@@ -1,0 +1,148 @@
+:host {
+  display: block;
+}
+
+h2 {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.title {
+  overflow-wrap: anywhere;
+}
+
+.subtitle {
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+mat-dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.center,
+.message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 0;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.route-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.route-switch .label {
+  font: var(--mat-sys-label-large);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.best {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font: var(--mat-sys-label-small);
+  color: var(--app-buy);
+  background: var(--app-buy-bg);
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--mat-sys-surface-container);
+}
+
+.tile-label {
+  font: var(--mat-sys-label-medium);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.tile-value {
+  font: var(--mat-sys-title-large);
+  font-weight: 600;
+}
+
+.tile-sub {
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.rec-BUY { color: var(--app-buy); }
+.rec-WATCH { color: var(--app-watch); }
+.rec-AVOID { color: var(--app-avoid); }
+
+.summary {
+  margin: 0;
+  font: var(--mat-sys-body-medium);
+}
+
+.chart-card {
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+}
+
+.chart-card h3 {
+  margin: 0 0 4px;
+  font: var(--mat-sys-title-medium);
+}
+
+.caption {
+  margin: 0 0 12px;
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+details {
+  margin-top: 12px;
+  font: var(--mat-sys-body-small);
+}
+
+summary {
+  cursor: pointer;
+  color: var(--mat-sys-primary);
+}
+
+table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+th,
+td {
+  padding: 4px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+th {
+  font: var(--mat-sys-label-medium);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+tr.muted {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.spacer {
+  flex: 1;
+}

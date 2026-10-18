@@ -1,5 +1,5 @@
 <mat-form-field appearance="outline" class="search" subscriptSizing="dynamic">
-  <mat-label>Tárgy követése</mat-label>
+  <mat-label>Értesítés kérése egy tárgyra</mat-label>
   <mat-icon matPrefix>search</mat-icon>
   <input
     matInput
@@ -12,15 +12,15 @@
   @if (searching()) {
     <mat-progress-spinner matSuffix mode="indeterminate" diameter="20" />
   }
-  <mat-hint>Írd be a tárgy nevét vagy SKU-ját, és válaszd ki a listából.</mat-hint>
+  <mat-hint>Ha egy tárgy nincs a listán, itt kérhetsz rá értesítést: onnantól folyamatosan elemezzük.</mat-hint>
 
   <mat-autocomplete #auto="matAutocomplete" [displayWith]="display" (optionSelected)="select($event)">
     @for (item of results(); track item.sku) {
-      @let tracked = store.trackedSkus().has(item.sku);
-      <mat-option [value]="item" [disabled]="tracked">
+      @let notified = store.notifiedSkus().has(item.sku);
+      <mat-option [value]="item" [disabled]="notified">
         <span class="option">
           <span class="name">{{ item.name }}</span>
-          <span class="sku">{{ item.sku }}@if (tracked) { · már követed }</span>
+          <span class="sku">{{ item.sku }}@if (notified) { · már kérsz rá értesítést }</span>
         </span>
       </mat-option>
     }
